@@ -5,8 +5,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyName>TokenBarCli</AssemblyName>
-    <RootNamespace>TokenBar.Cli</RootNamespace>
   </PropertyGroup>
 
 </Project>
