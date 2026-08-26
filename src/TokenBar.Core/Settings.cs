@@ -14,9 +14,20 @@ namespace TokenBar.Core;
 /// </remarks>
 public sealed class Settings
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     public int Version { get; set; } = CurrentVersion;
+
+    /// <summary>
+    /// Yüzen pencerenin son konumu. <c>null</c> = daha hiç taşınmadı,
+    /// ekranın sağ altına yerleş.
+    /// </summary>
+    public double? Left { get; set; }
+
+    public double? Top { get; set; }
+
+    /// <summary>Uygulama açılırken panel açık mı gelsin.</summary>
+    public bool StartExpanded { get; set; }
 
     /// <summary>Windows açılışında kendiliğinden başlasın mı.</summary>
     public bool StartWithWindows { get; set; }

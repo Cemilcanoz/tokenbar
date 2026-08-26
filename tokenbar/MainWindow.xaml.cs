@@ -1,26 +1,179 @@
 using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media.Animation;
+
+// ⚠️ UseWindowsForms açık olduğu için Point ve MouseEventArgs iki ayrı ad
+// alanından birden geliyor (System.Drawing / System.Windows.Forms ve WPF'inki).
+// Tepsi ikonu WinForms'tan geliyor, bu pencere WPF — hangisini kastettiğimizi
+// açıkça söylemek zorundayız.
+using Point = System.Windows.Point;
+using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 
 namespace tokenbar;
 
 /// <summary>
-/// Pencerenin kod tarafı. XAML'deki x:Name'ler burada birer alan gibi görünür —
-/// ikisi "partial class" ile birleşiyor.
+/// Yüzen rozet. Tıklayınca büyüyüp asıl paneli açıyor.
 /// </summary>
 /// <remarks>
 /// ⚠️ Bu pencere <b>hiç dosya okumuyor.</b> Taramayı <see cref="App"/> yapıyor,
-/// buraya yalnızca hazır bir <see cref="Gorunum"/> geliyor. Ayrım kasıtlı:
-/// pencere kapalıyken de tepsi güncellenmeye devam ediyor.
+/// buraya hazır bir <see cref="Gorunum"/> geliyor. Ayrım kasıtlı: pencere
+/// kapalıyken de tepsi güncellenmeye devam ediyor.
 /// </remarks>
 public partial class MainWindow : Window
 {
+    private const double KompaktGenislik = 252;
+    private const double GenisGenislik = 470;
+    private const double GenisYukseklik = 780;
+
+    /// <summary>Sürükleme mi tıklama mı — bu eşiğin altındaki hareket tıklamadır.</summary>
+    private const double SurukleEsigi = 4;
+
+    private bool _genis;
     private bool _genelToplamAcik;
+
+    private Point _basincKonum;
+    private bool _basili;
+    private bool _suruklendi;
+
+    private double _kompaktYukseklik = 121;
 
     public event Action? YenileIstendi;
     public event Action<bool>? GenelToplamDegisti;
+    public event Action? KonumDegisti;
 
-    public MainWindow() => InitializeComponent();
+    public MainWindow()
+    {
+        InitializeComponent();
+
+        // Esc = küçült. Kenarlıksız pencerede kaçış yolu şart.
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape && _genis) Kucult();
+        };
+
+        // Rozet hâlindeyken soluk dursun, üstüne gelince belirginleşsin.
+        MouseEnter += (_, _) => { if (!_genis) Opacity = 1.0; };
+        MouseLeave += (_, _) => { if (!_genis) Opacity = 0.82; };
+
+        Opacity = 0.82;
+    }
+
+    public bool Genis => _genis;
+
+    // ── Sürükleme ve tıklama ────────────────────────────────────────────
+    //
+    // 🔴 DragMove() çağırdığın an fare olayını yutuyor: MouseUp hiç gelmiyor.
+    // Bu yüzden "tıkla → büyüsün" ile "sürükle → taşınsın" doğrudan çakışıyor.
+    // Çözüm: basıldığı yeri sakla, fare 4 pikselden fazla kaydıysa sürükleme
+    // say, kaymadıysa tıklama say.
+
+    private void Kabuk_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _basincKonum = e.GetPosition(this);
+        _basili = true;
+        _suruklendi = false;
+    }
+
+    private void Kabuk_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_basili || e.LeftButton != MouseButtonState.Pressed) return;
+
+        var simdi = e.GetPosition(this);
+        if (Math.Abs(simdi.X - _basincKonum.X) < SurukleEsigi &&
+            Math.Abs(simdi.Y - _basincKonum.Y) < SurukleEsigi) return;
+
+        _suruklendi = true;
+        _basili = false;
+
+        try
+        {
+            DragMove();
+        }
+        catch (InvalidOperationException)
+        {
+            // Düğme bu arada bırakılmışsa DragMove atar. Zararsız.
+        }
+
+        KonumDegisti?.Invoke();
+    }
+
+    private void Kabuk_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        var tiklama = _basili && !_suruklendi;
+        _basili = false;
+
+        // Geniş hâlde gövdeye tıklamak paneli kapatmasın — sadece rozet açar.
+        if (tiklama && !_genis) Genislet();
+    }
+
+    // ── Büyüme / küçülme ────────────────────────────────────────────────
+
+    public void Genislet()
+    {
+        if (_genis) return;
+        _genis = true;
+
+        KompaktPanel.Visibility = Visibility.Collapsed;
+        GenisPanel.Visibility = Visibility.Visible;
+
+        Opacity = 1.0;
+        Boyutla(GenisGenislik, GenisYukseklik);
+    }
+
+    public void Kucult()
+    {
+        if (!_genis) return;
+        _genis = false;
+
+        GenisPanel.Visibility = Visibility.Collapsed;
+        KompaktPanel.Visibility = Visibility.Visible;
+
+        Opacity = IsMouseOver ? 1.0 : 0.82;
+        Boyutla(KompaktGenislik, _kompaktYukseklik);
+    }
+
+    /// <summary>
+    /// Boyutu yumuşak geçişle değiştirir.
+    /// </summary>
+    /// <remarks>
+    /// Animasyon bittiğinde <c>BeginAnimation(..., null)</c> ile animasyonu
+    /// kaldırıyoruz. Yoksa animasyon değeri özelliği <b>kilitler</b> ve
+    /// sonradan <c>Width = …</c> yazmak hiçbir şey yapmaz — WPF'in klasik
+    /// tuzağı.
+    /// </remarks>
+    private void Boyutla(double genislik, double yukseklik)
+    {
+        var sure = TimeSpan.FromMilliseconds(160);
+        var yumusatma = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+        var g = new DoubleAnimation(genislik, sure) { EasingFunction = yumusatma };
+        var y = new DoubleAnimation(yukseklik, sure) { EasingFunction = yumusatma };
+
+        g.Completed += (_, _) => { BeginAnimation(WidthProperty, null); Width = genislik; };
+        y.Completed += (_, _) => { BeginAnimation(HeightProperty, null); Height = yukseklik; EkranaSigdir(); };
+
+        BeginAnimation(WidthProperty, g);
+        BeginAnimation(HeightProperty, y);
+    }
+
+    /// <summary>Büyüyünce ekranın dışına taşmasın.</summary>
+    private void EkranaSigdir()
+    {
+        var alan = SystemParameters.WorkArea;
+
+        if (Left + Width > alan.Right) Left = Math.Max(alan.Left, alan.Right - Width);
+        if (Top + Height > alan.Bottom) Top = Math.Max(alan.Top, alan.Bottom - Height);
+        if (Left < alan.Left) Left = alan.Left;
+        if (Top < alan.Top) Top = alan.Top;
+
+        KonumDegisti?.Invoke();
+    }
+
+    // ── Düğmeler ────────────────────────────────────────────────────────
 
     private void YenileButton_Click(object sender, RoutedEventArgs e) => YenileIstendi?.Invoke();
+
+    private void KucultButton_Click(object sender, RoutedEventArgs e) => Kucult();
 
     private void GenelToplamButton_Click(object sender, RoutedEventArgs e)
     {
@@ -29,10 +182,13 @@ public partial class MainWindow : Window
         GenelToplamDegisti?.Invoke(_genelToplamAcik);
     }
 
+    // ── Veri ────────────────────────────────────────────────────────────
+
     public void MesgulGoster()
     {
         YenileButton.IsEnabled = false;
         AltBaslikText.Text = "okunuyor…";
+        KompaktDurumText.Text = "•••";
         HataText.Visibility = Visibility.Collapsed;
     }
 
@@ -41,9 +197,14 @@ public partial class MainWindow : Window
         YenileButton.IsEnabled = true;
         HataText.Visibility = Visibility.Collapsed;
 
+        KompaktListesi.ItemsSource = g.Kompakt;
         KartListesi.ItemsSource = g.Kartlar;
         PasifListesi.ItemsSource = g.Pasifler;
         OturumListesi.ItemsSource = g.Oturumlar;
+
+        // Rozetin boyu ajan sayısına göre değişiyor: başlık + satırlar + kenar.
+        _kompaktYukseklik = 24 + 24 + 21 + Math.Max(1, g.Kompakt.Count) * 24 + 4;
+        if (!_genis) Height = _kompaktYukseklik;
 
         GenelToplamText.Text = g.GenelToplam;
         _genelToplamAcik = g.GenelToplamGoster;
@@ -53,6 +214,7 @@ public partial class MainWindow : Window
             ? "veri yok"
             : $"son ajan etkinliği {Bicim.NeKadarOnce(g.SonEtkinlik)}";
 
+        KompaktDurumText.Text = g.ScanSaati;
         DurumText.Text = g.Durum;
     }
 
@@ -62,6 +224,7 @@ public partial class MainWindow : Window
         HataText.Text = mesaj;
         HataText.Visibility = Visibility.Visible;
         AltBaslikText.Text = "okunamadı";
+        KompaktDurumText.Text = "hata";
     }
 
     private void GenelToplamUygula()

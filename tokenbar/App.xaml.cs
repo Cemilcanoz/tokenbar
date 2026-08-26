@@ -63,6 +63,7 @@ public partial class App : Application
             _ayarlar.ShowGrandTotal = acik;
             _ayarlar.Save();
         };
+        _pencere.KonumDegisti += KonumuKaydet;
 
         // Kapatma çıkış değil, gizleme. Uygulama tepside yaşamaya devam eder.
         _pencere.Closing += (_, args) =>
@@ -72,7 +73,10 @@ public partial class App : Application
             _pencere.Hide();
         };
 
-        PencereyiGoster();
+        KonumuGeriYukle();
+        _pencere.Show();
+        if (_ayarlar.StartExpanded) _pencere.Genislet();
+
         _ = DonguAsync();
     }
 
@@ -84,7 +88,42 @@ public partial class App : Application
         _pencere.Show();
         if (_pencere.WindowState == WindowState.Minimized)
             _pencere.WindowState = WindowState.Normal;
+
+        _pencere.Genislet();
         _pencere.Activate();
+    }
+
+    /// <summary>
+    /// Rozetin son konumu. İlk açılışta sağ alt köşe — orası tepsiye en yakın
+    /// ve genelde en az meşgul olan yer.
+    /// </summary>
+    private void KonumuGeriYukle()
+    {
+        if (_pencere is null) return;
+
+        var alan = SystemParameters.WorkArea;
+
+        if (_ayarlar.Left is { } x && _ayarlar.Top is { } y)
+        {
+            // ⚠️ Monitör sökülmüş olabilir: kayıtlı konum artık ekran dışında
+            // kalırsa pencere görünmez olur ve kullanıcı onu bulamaz.
+            _pencere.Left = Math.Clamp(x, alan.Left, Math.Max(alan.Left, alan.Right - _pencere.Width));
+            _pencere.Top = Math.Clamp(y, alan.Top, Math.Max(alan.Top, alan.Bottom - _pencere.Height));
+            return;
+        }
+
+        _pencere.Left = alan.Right - _pencere.Width - 16;
+        _pencere.Top = alan.Bottom - _pencere.Height - 16;
+    }
+
+    private void KonumuKaydet()
+    {
+        if (_pencere is null) return;
+
+        _ayarlar.Left = _pencere.Left;
+        _ayarlar.Top = _pencere.Top;
+        _ayarlar.StartExpanded = _pencere.Genis;
+        _ayarlar.Save();
     }
 
     /// <summary>

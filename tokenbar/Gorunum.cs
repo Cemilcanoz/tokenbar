@@ -71,14 +71,25 @@ public sealed record PasifAjan(string Ad, string Sebep);
 /// <summary>Oturum listesindeki tek satır.</summary>
 public sealed record OturumSatiri(string Ajan, string Etiket, string Toplam);
 
+/// <summary>
+/// Küçük hâldeki rozette görünen tek satır — kısa sayı (<c>210,4M</c>).
+/// </summary>
+/// <remarks>
+/// Ajanlar burada da <b>ayrı</b> satırlarda. Tek bir birleşik sayı
+/// gösterilmiyor: 1000 Codex token'ı ile 1000 Claude token'ı aynı şey değil.
+/// </remarks>
+public sealed record KompaktSatir(string Ad, string Toplam);
+
 /// <summary>Bir taramanın ekrana hazır hâli.</summary>
 public sealed record Gorunum(
     IReadOnlyList<AjanKarti> Kartlar,
+    IReadOnlyList<KompaktSatir> Kompakt,
     IReadOnlyList<PasifAjan> Pasifler,
     IReadOnlyList<OturumSatiri> Oturumlar,
     string GenelToplam,
     bool GenelToplamGoster,
     string Durum,
+    string ScanSaati,
     string IkonMetni,
     string Tooltip,
     DateTimeOffset SonEtkinlik)
@@ -125,13 +136,19 @@ public sealed record Gorunum(
             kartlar.Select(k => $"{k.Ad}: {k.Toplam}"));
         if (tooltip.Length > 127) tooltip = tooltip[..127];
 
+        var kompakt = aktif
+            .Select(p => new KompaktSatir(p.AgentName, Bicim.Kisa(p.Totals.Total)))
+            .ToList();
+
         return new Gorunum(
             Kartlar: kartlar,
+            Kompakt: kompakt,
             Pasifler: pasifler,
             Oturumlar: oturumlar,
             GenelToplam: Bicim.Tam(toplam),
             GenelToplamGoster: genelToplamGoster,
             Durum: durum,
+            ScanSaati: scan.ScannedAt.ToString("HH:mm"),
             IkonMetni: Bicim.Ikon(toplam),
             Tooltip: tooltip,
             SonEtkinlik: sonEtkinlik);
