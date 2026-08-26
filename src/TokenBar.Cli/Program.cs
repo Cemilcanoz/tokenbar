@@ -1,7 +1,6 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
-using TokenBar.Cli;
+using TokenBar.Core;
 
 // Türkçe karakterler ve binlik ayracı için.
 Console.OutputEncoding = Encoding.UTF8;
@@ -10,91 +9,108 @@ var tr = new CultureInfo("tr-TR");
 // --detail: her oturumu ayrı ayrı yaz (SQLite kehanetiyle karşılaştırmak için)
 var detail = args.Contains("--detail");
 
-var sessionsDirectory = CodexSessionReader.FindSessionsDirectory();
-Console.WriteLine($"Klasör: {sessionsDirectory}");
+var scanner = UsageScanner.Default();
+var scan = scanner.Scan();
 
-if (!Directory.Exists(sessionsDirectory))
-{
-    Console.WriteLine("Klasör bulunamadı. Codex CLI kurulu mu?");
-    return 1;
-}
-
-var stopwatch = Stopwatch.StartNew();
-
-var results = new List<SessionResult>();
-var unreadable = new List<(string Path, string Error)>();
-
-foreach (var path in CodexSessionReader.EnumerateSessionFiles(sessionsDirectory))
-{
-    try
-    {
-        results.Add(CodexSessionReader.ReadFile(path));
-    }
-    catch (IOException ex)
-    {
-        unreadable.Add((path, ex.Message));
-    }
-    catch (UnauthorizedAccessException ex)
-    {
-        unreadable.Add((path, ex.Message));
-    }
-}
-
-stopwatch.Stop();
-
-// ⭐ Her dosyanın SON değeri kümülatif. Dosyalar arası toplama yapılır.
-var totals = results
-    .Where(r => r.HasTokenCount)
-    .Aggregate(TokenUsage.Zero, (sum, r) => sum + r.Usage);
-
-var withCount = results.Count(r => r.HasTokenCount);
-var malformed = results.Sum(r => r.MalformedLines);
-var resets = results.Count(r => r.CounterReset);
-
-if (detail)
-{
-    foreach (var r in results.Where(r => r.HasTokenCount).OrderBy(r => r.Path))
-        Console.WriteLine($"{r.Usage.Total}	{r.Path}");
-    return 0;
-}
-
-Console.WriteLine();
-Console.WriteLine($"Dosya: {results.Count}    token_count bulunan: {withCount}    bulunmayan: {results.Count - withCount}");
-Console.WriteLine($"Bozuk satır: {malformed}");
-Console.WriteLine();
-Console.WriteLine($"input:  {totals.InputTokens,15:N0}   (bunun {totals.CachedInputTokens:N0}'si önbellekten)".Replace("  ", "  "));
-Console.WriteLine($"output: {totals.OutputTokens,15:N0}   (bunun {totals.ReasoningOutputTokens:N0}'i reasoning)");
-Console.WriteLine($"TOPLAM: {totals.Total,15:N0}");
-Console.WriteLine();
-Console.WriteLine($"Süre: {stopwatch.ElapsedMilliseconds} ms");
-
-if (unreadable.Count > 0)
+foreach (var provider in scan.Providers)
 {
     Console.WriteLine();
-    Console.WriteLine($"⚠️  Açılamayan dosya: {unreadable.Count}");
-    foreach (var (path, error) in unreadable)
-        Console.WriteLine($"    {Path.GetFileName(path)}: {error}");
+    Console.WriteLine($"── {provider.AgentName} ──");
+
+    switch (provider.Status)
+    {
+        case ProviderStatus.NotInstalled:
+            Console.WriteLine("   kurulu değil");
+            continue;
+
+        case ProviderStatus.Unsupported:
+            Console.WriteLine($"   okunmuyor — {provider.Note}");
+            Console.WriteLine($"   ({provider.Stats.Files} dosya bulundu)");
+            continue;
+
+        case ProviderStatus.Failed:
+            Console.WriteLine($"   HATA — {provider.Note}");
+            continue;
+    }
+
+    var t = provider.Totals;
+    var s = provider.Stats;
+
+    Console.WriteLine($"   dosya {s.Files}  ·  veri olan {s.FilesWithData}  ·  bozuk satır {s.MalformedLines}"
+                      + (s.DedupedLines > 0 ? $"  ·  tekrar {s.DedupedLines}" : "")
+                      + (s.UnreadableFiles > 0 ? $"  ·  açılamayan {s.UnreadableFiles}" : ""));
+    Console.WriteLine();
+    Console.WriteLine($"   yeni girdi    {t.InputFresh,15:N0}");
+    Console.WriteLine($"   önbellekten   {t.InputCached,15:N0}   (%{t.CacheHitRatio * 100:0.#})");
+    Console.WriteLine($"   önbelleğe     {t.CacheWrite,15:N0}");
+    Console.WriteLine($"   çıktı         {t.Output,15:N0}"
+                      + (t.Reasoning > 0 ? $"   (bunun {t.Reasoning:N0}'i reasoning)" : ""));
+    Console.WriteLine($"   TOPLAM        {t.Total,15:N0}");
+
+    if (provider.SubagentTotals is { } sub && sub.Total > 0)
+        Console.WriteLine($"   ↳ alt ajan    {sub.Total,15:N0}   (%{100.0 * sub.Total / t.Total:0.#})");
+
+    if (provider.Quota is { } q)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"   kota  %{q.UsedPercent:0.#} kullanılmış  ({q.WindowLabel} pencere, plan: {q.PlanType})");
+        Console.WriteLine($"         ölçüm {q.MeasuredAt.ToLocalTime():d MMM yyyy HH:mm} — {(int)q.Age.TotalDays} gün önce");
+    }
+
+    if (provider.Note is not null)
+        Console.WriteLine($"   {provider.Note}");
+
+    if (detail)
+    {
+        Console.WriteLine();
+        foreach (var session in provider.Sessions)
+            Console.WriteLine($"   {session.Totals.Total,15:N0}  {session.Label}");
+    }
 }
 
-// ❓ Açık soru: context_compacted sayacı sıfırlıyor mu?
 Console.WriteLine();
-Console.WriteLine(resets == 0
-    ? "✅ Hiçbir dosyada sayaç geriye gitmedi — 'son değeri al' güvenli."
-    : $"🔴 {resets} dosyada sayaç geriye gitti — 'son değeri al' o dosyalarda EKSİK sayıyor.");
+Console.WriteLine($"Süre: {scan.ElapsedMs} ms   ·   önbellekten gelen dosya: "
+                  + string.Join(", ", scan.Active.Select(p => $"{p.AgentName} {p.Stats.CachedFiles}")));
 
-// Doğrulama: bilinen referans sayılarla karşılaştır.
-const long expectedInput = 209_443_513;
-const long expectedCached = 197_488_512;
-const long expectedOutput = 962_477;
-const long expectedReasoning = 200_381;
-
+// ── Doğrulama ───────────────────────────────────────────────────────────
+// Referans sayılar PowerShell ile bağımsız olarak hesaplandı.
 Console.WriteLine();
 Console.WriteLine("Referans karşılaştırması");
-Check("input_tokens", totals.InputTokens, expectedInput);
-Check("cached_input_tokens", totals.CachedInputTokens, expectedCached);
-Check("output_tokens", totals.OutputTokens, expectedOutput);
-Check("reasoning_output_tokens", totals.ReasoningOutputTokens, expectedReasoning);
-Check("TOPLAM", totals.Total, expectedInput + expectedOutput);
+
+var codex = scan.Providers.FirstOrDefault(p => p.AgentName == "Codex CLI");
+if (codex?.Status == ProviderStatus.Ok)
+{
+    Console.WriteLine("  Codex CLI");
+    Check("önbellekten", codex.Totals.InputCached, 197_488_512);
+    Check("çıktı", codex.Totals.Output, 962_477);
+    Check("reasoning", codex.Totals.Reasoning, 200_381);
+    Check("TOPLAM", codex.Totals.Total, 210_405_990);
+}
+
+// ⚠️ Claude Code ŞU AN çalışıyor. Sabit bir referans sayı yazarsan dakikalar
+// içinde eskir ve doğru parser'ı ❌ diye işaretler. Bu yüzden kontrol sadece
+// TOKENBAR_CLAUDE_HOME dondurulmuş bir kopyaya bakıyorken anlamlı.
+var claude = scan.Providers.FirstOrDefault(p => p.AgentName == "Claude Code");
+if (claude?.Status == ProviderStatus.Ok)
+{
+    var frozen = Environment.GetEnvironmentVariable("TOKENBAR_CLAUDE_HOME");
+    if (frozen is null)
+    {
+        Console.WriteLine("  Claude Code — atlandı");
+        Console.WriteLine("    Ajan canlı; sayı her dakika değişiyor, sabit referansla");
+        Console.WriteLine("    karşılaştırılamaz. Dondurulmuş kopyaya karşı çalıştır:");
+        Console.WriteLine("      $env:TOKENBAR_CLAUDE_HOME = \"<kopya>\"; dotnet run");
+    }
+    else
+    {
+        Console.WriteLine($"  Claude Code — dondurulmuş kopya");
+        Check("yeni girdi", claude.Totals.InputFresh, 45_742);
+        Check("önbellekten", claude.Totals.InputCached, 214_524_132);
+        Check("önbelleğe", claude.Totals.CacheWrite, 8_319_463);
+        Check("çıktı", claude.Totals.Output, 1_787_389);
+        Check("TOPLAM", claude.Totals.Total, 224_676_726);
+    }
+}
 
 return 0;
 
@@ -103,5 +119,5 @@ void Check(string name, long actual, long expected)
     var mark = actual == expected ? "✅" : "❌";
     var diff = actual - expected;
     var note = diff == 0 ? "" : $"  (fark: {diff:+#,##0;-#,##0})";
-    Console.WriteLine($"  {mark} {name,-24} {actual,15:N0}{note}");
+    Console.WriteLine($"    {mark} {name,-14} {actual,15:N0}{note}");
 }

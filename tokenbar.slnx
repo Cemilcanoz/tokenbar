@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/TokenBar.Cli/TokenBar.Cli.csproj" />
+    <Project Path="src/TokenBar.Core/TokenBar.Core.csproj" />
   </Folder>
   <Project Path="tokenbar/tokenbar.csproj" />
 </Solution>

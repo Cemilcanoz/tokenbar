@@ -6,18 +6,28 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+
+    <!--
+      Tepsi ikonu için WinForms'un NotifyIcon'ı kullanılıyor: sıfır bağımlılık,
+      Microsoft bakımında ve TaskbarCreated olayını (Explorer çökerse ikon
+      kaybolması) kendisi hallediyor.
+
+      ⚠️ Bedeli isim çakışması: MenuItem, ContextMenu, Application, Brushes
+      hem WPF'te hem WinForms'ta var. Bu yüzden TrayIcon.cs takma ad kullanıyor.
+    -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>tokenbar.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <!--
-      ⚠️ GEÇİCİ BORÇ — Faz 2'de düzelecek.
-      Arayüz, konsol uygulamasına referans veriyor. Bir arayüzün bir konsol
-      EXE'sine bağımlı olması yanlış: parser ikisinin de ortak malı olmalı.
-      Doğrusu: TokenUsage.cs + CodexSessionReader.cs -> TokenBar.Core
-      (bir sınıf kütüphanesi), Cli ve tokenbar ikisi birden ona referans verir.
-      Şu an derleme çalışsın diye kısa yoldan bağlandı.
+      ⚠️ ApplicationIcon yukarıda EXE'nin ikonunu ayarlıyor — ama XAML'deki
+      Icon="tokenbar.ico" onu görmüyor. Pencere ikonu için dosyanın ayrıca
+      Resource olarak gömülmesi gerekiyor. İkisi ayrı mekanizma.
     -->
-    <ProjectReference Include="..\src\TokenBar.Cli\TokenBar.Cli.csproj" />
+    <None Remove="tokenbar.ico" />
+    <Resource Include="tokenbar.ico" />
+    <ProjectReference Include="..\src\TokenBar.Core\TokenBar.Core.csproj" />
   </ItemGroup>
 
 </Project>
