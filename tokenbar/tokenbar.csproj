@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -7,5 +7,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      ⚠️ GEÇİCİ BORÇ — Faz 2'de düzelecek.
+      Arayüz, konsol uygulamasına referans veriyor. Bir arayüzün bir konsol
+      EXE'sine bağımlı olması yanlış: parser ikisinin de ortak malı olmalı.
+      Doğrusu: TokenUsage.cs + CodexSessionReader.cs -> TokenBar.Core
+      (bir sınıf kütüphanesi), Cli ve tokenbar ikisi birden ona referans verir.
+      Şu an derleme çalışsın diye kısa yoldan bağlandı.
+    -->
+    <ProjectReference Include="..\src\TokenBar.Cli\TokenBar.Cli.csproj" />
+  </ItemGroup>
 
 </Project>

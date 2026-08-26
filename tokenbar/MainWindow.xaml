@@ -1,12 +1,249 @@
-﻿<Window x:Class="tokenbar.MainWindow"
+<Window x:Class="tokenbar.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:tokenbar"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="TokenBar"
+        Height="620" Width="440"
+        MinHeight="440" MinWidth="380"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI"
+        Background="#FF15171C">
+
+    <!--
+      Bu dosya SADECE görünüm. Hiç mantık yok.
+      Kod tarafı MainWindow.xaml.cs — ikisi "partial class" ile aynı sınıf.
+    -->
+
+    <Window.Resources>
+
+        <!-- Küçük gri açıklama yazısı -->
+        <Style x:Key="Etiket" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#FF8A90A0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Girintili alt satır: "bunun şu kadarı önbellekten" -->
+        <Style x:Key="AltEtiket" TargetType="TextBlock" BasedOn="{StaticResource Etiket}">
+            <Setter Property="Foreground" Value="#FF616978"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+
+        <!-- Sağa yaslı sayı. Tabular = rakamlar eşit genişlikte, alt alta hizalanır. -->
+        <Style x:Key="Sayi" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#FFE8EAF0"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Typography.NumeralAlignment" Value="Tabular"/>
+        </Style>
+
+        <Style x:Key="AltSayi" TargetType="TextBlock" BasedOn="{StaticResource Sayi}">
+            <Setter Property="Foreground" Value="#FF616978"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+
+        <!--
+          Butonun kendi şablonu. WPF'in hazır butonu açık temalı; koyu zeminde
+          çirkin duruyor. ControlTemplate = "bu kontrolün görünümünü baştan çiz".
+        -->
+        <Style x:Key="DuzButon" TargetType="Button">
+            <Setter Property="Foreground" Value="#FFE8EAF0"/>
+            <Setter Property="Background" Value="#FF2A2F3B"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Kutu"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="7"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Kutu" Property="Background" Value="#FF3B4252"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
+          Kaydırma çubuğu. WPF'in hazırı açık temalı, koyu zeminde beyaz bir
+          şerit gibi duruyordu. TargetType var ama x:Key yok — buna "örtük
+          stil" denir: penceredeki TÜM ScrollBar'lara kendiliğinden uygulanır.
+        -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="9"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border Background="#FF3A4150"
+                                                        CornerRadius="4"
+                                                        Margin="2,0"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                                <!-- Boşluğa tıklayınca sayfa atlasın; ama görünmesin. -->
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageUpCommand"
+                                                  Opacity="0" Focusable="False"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageDownCommand"
+                                                  Opacity="0" Focusable="False"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+    </Window.Resources>
+
+    <Grid Margin="22,18,22,16">
+        <Grid.RowDefinitions>
+            <!-- 0 başlık · 1 büyük toplam · 2 kırılım · 3 liste başlığı · 4 liste · 5 durum -->
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 0 -->
+        <DockPanel Grid.Row="0" Margin="0,0,0,18">
+            <Button DockPanel.Dock="Right"
+                    x:Name="YenileButton"
+                    Content="Yenile"
+                    Style="{StaticResource DuzButon}"
+                    Click="YenileButton_Click"/>
+            <TextBlock Text="TokenBar"
+                       Foreground="#FFE8EAF0"
+                       FontSize="19"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center"/>
+        </DockPanel>
+
+        <!-- 1 -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,20">
+            <TextBlock x:Name="ToplamText"
+                       Text="—"
+                       Foreground="#FF7EE0C0"
+                       FontSize="44"
+                       FontWeight="Light"
+                       Typography.NumeralAlignment="Tabular"/>
+            <TextBlock x:Name="OzetText"
+                       Text="okunuyor…"
+                       Style="{StaticResource Etiket}"
+                       Margin="2,2,0,0"/>
+        </StackPanel>
+
+        <!-- 2 -->
+        <Border Grid.Row="2"
+                Background="#FF1D2027"
+                CornerRadius="10"
+                Padding="16,13"
+                Margin="0,0,0,20">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Girdi" Style="{StaticResource Etiket}"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="GirdiText" Text="—" Style="{StaticResource Sayi}"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="önbellekten" Style="{StaticResource AltEtiket}" Margin="14,3,0,9"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="OnbellekText" Text="—" Style="{StaticResource AltSayi}" Margin="0,3,0,9"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Çıktı" Style="{StaticResource Etiket}"/>
+                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="CiktiText" Text="—" Style="{StaticResource Sayi}"/>
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="düşünme (reasoning)" Style="{StaticResource AltEtiket}" Margin="14,3,0,0"/>
+                <TextBlock Grid.Row="3" Grid.Column="1" x:Name="ReasoningText" Text="—" Style="{StaticResource AltSayi}" Margin="0,3,0,0"/>
+            </Grid>
+        </Border>
+
+        <!-- 3 -->
+        <TextBlock Grid.Row="3"
+                   Text="OTURUMLAR · en çok harcayandan"
+                   Style="{StaticResource Etiket}"
+                   FontSize="11"
+                   Margin="2,0,0,8"/>
+
+        <!-- 4 -->
+        <Border Grid.Row="4"
+                Background="#FF1D2027"
+                CornerRadius="10"
+                Padding="4,6">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <!--
+                  ItemsControl: listeyi elle doldurmuyoruz. Kod tarafında
+                  OturumListesi.ItemsSource = ... diyoruz, WPF her satır için
+                  aşağıdaki şablonu kendisi çoğaltıyor. Buna "binding" deniyor.
+                -->
+                <ItemsControl x:Name="OturumListesi">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="12,5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Tarih}"
+                                           Foreground="#FF9BA2B2"
+                                           FontSize="13"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding Toplam}"
+                                           Foreground="#FFE8EAF0"
+                                           FontSize="13"
+                                           Typography.NumeralAlignment="Tabular"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- 5 -->
+        <StackPanel Grid.Row="5" Margin="2,12,0,0">
+            <TextBlock x:Name="DurumText"
+                       Text=""
+                       Style="{StaticResource Etiket}"
+                       FontSize="11"/>
+            <TextBlock x:Name="HataText"
+                       Text=""
+                       Foreground="#FFE86A6A"
+                       FontSize="12"
+                       TextWrapping="Wrap"
+                       Margin="0,6,0,0"
+                       Visibility="Collapsed"/>
+        </StackPanel>
 
     </Grid>
 </Window>
