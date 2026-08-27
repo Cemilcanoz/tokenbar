@@ -34,6 +34,17 @@ public static class Bicim
 
     public static string Yuzde(double oran) => "%" + (oran * 100).ToString("0.#", Tr);
 
+    /// <summary>"4 gün sonra", "3 saat sonra" — kotanın ne zaman yenileneceği.</summary>
+    public static string NeKadarSonra(DateTimeOffset an)
+    {
+        var fark = an - DateTimeOffset.Now;
+
+        if (fark <= TimeSpan.Zero) return "birazdan";
+        if (fark < TimeSpan.FromHours(1)) return $"{(int)fark.TotalMinutes} dk sonra";
+        if (fark < TimeSpan.FromDays(1)) return $"{(int)fark.TotalHours} saat sonra";
+        return $"{(int)fark.TotalDays} gün sonra";
+    }
+
     /// <summary>"3 dakika önce", "2 gün önce" — bayat veriyi görünür kılar.</summary>
     public static string NeKadarOnce(DateTimeOffset an)
     {

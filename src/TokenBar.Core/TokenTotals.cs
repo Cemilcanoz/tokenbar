@@ -105,6 +105,28 @@ public sealed record QuotaInfo(
     };
 
     public TimeSpan Age => DateTimeOffset.Now - MeasuredAt;
+
+    /// <summary>Kotanın yüzde kaçı duruyor.</summary>
+    public double RemainingPercent => Math.Clamp(100 - UsedPercent, 0, 100);
+
+    /// <summary>
+    /// Bu ölçüm artık geçerli değil.
+    /// </summary>
+    /// <remarks>
+    /// 🔴 Projenin en kolay yapılacak yalanı burada. Kota <b>anlık durum</b>;
+    /// ajan 26 gündür çalışmadıysa elimizdeki değer 26 günlük. Aylık pencere
+    /// bu arada en az bir kez sıfırlanmıştır — yani "kalan %41" yazmak
+    /// <b>uydurma</b> olur.
+    ///
+    /// İki koşuldan biri yeterli:
+    /// <list type="bullet">
+    /// <item>Sıfırlanma anı geçmişte kaldıysa</item>
+    /// <item>Ölçümün üstünden bir pencere boyundan fazla zaman geçtiyse</item>
+    /// </list>
+    /// </remarks>
+    public bool IsStale =>
+        (ResetsAt is { } r && r < DateTimeOffset.Now) ||
+        (WindowMinutes > 0 && Age > TimeSpan.FromMinutes(WindowMinutes));
 }
 
 /// <summary>Taramanın kendisi hakkında sayılar — dürüstlük göstergesi.</summary>

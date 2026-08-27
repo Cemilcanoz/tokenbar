@@ -8,6 +8,7 @@ using System.Windows.Media.Animation;
 // açıkça söylemek zorundayız.
 using Point = System.Windows.Point;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
+using Size = System.Windows.Size;
 
 namespace tokenbar;
 
@@ -21,7 +22,7 @@ namespace tokenbar;
 /// </remarks>
 public partial class MainWindow : Window
 {
-    private const double KompaktGenislik = 252;
+    private const double KompaktGenislik = 286;
     private const double GenisGenislik = 470;
     private const double GenisYukseklik = 780;
 
@@ -35,7 +36,7 @@ public partial class MainWindow : Window
     private bool _basili;
     private bool _suruklendi;
 
-    private double _kompaktYukseklik = 121;
+    private double _kompaktYukseklik = 176;
 
     public event Action? YenileIstendi;
     public event Action<bool>? GenelToplamDegisti;
@@ -128,6 +129,10 @@ public partial class MainWindow : Window
         GenisPanel.Visibility = Visibility.Collapsed;
         KompaktPanel.Visibility = Visibility.Visible;
 
+        // Ölçüm ancak panel görünür olduktan SONRA anlamlı — gizli bir
+        // elemanın DesiredSize'ı sıfırdır.
+        _kompaktYukseklik = KompaktYukseklikHesapla();
+
         Opacity = IsMouseOver ? 1.0 : 0.82;
         Boyutla(KompaktGenislik, _kompaktYukseklik);
     }
@@ -154,6 +159,24 @@ public partial class MainWindow : Window
 
         BeginAnimation(WidthProperty, g);
         BeginAnimation(HeightProperty, y);
+    }
+
+    /// <summary>
+    /// Rozetin içeriğinin gerçekte kaç piksel tuttuğunu WPF'e sordurur.
+    /// </summary>
+    /// <remarks>
+    /// <c>Measure</c> "bu genişlikte, sınırsız yükseklikte kaç piksel yer
+    /// kaplarsın?" demek; cevabı <c>DesiredSize</c>'a yazıyor. Sabit bir
+    /// formül yazsaydık kota satırı gizlendiğinde ya da metin iki satıra
+    /// sardığında tutmazdı.
+    ///
+    /// +26 dış kabuğun payı: <c>Margin="12"</c> (üst+alt 24) ve
+    /// <c>BorderThickness="1"</c> (üst+alt 2).
+    /// </remarks>
+    private double KompaktYukseklikHesapla()
+    {
+        KompaktPanel.Measure(new Size(KompaktGenislik - 26, double.PositiveInfinity));
+        return Math.Ceiling(KompaktPanel.DesiredSize.Height) + 26;
     }
 
     /// <summary>Büyüyünce ekranın dışına taşmasın.</summary>
@@ -202,9 +225,13 @@ public partial class MainWindow : Window
         PasifListesi.ItemsSource = g.Pasifler;
         OturumListesi.ItemsSource = g.Oturumlar;
 
-        // Rozetin boyu ajan sayısına göre değişiyor: başlık + satırlar + kenar.
-        _kompaktYukseklik = 24 + 24 + 21 + Math.Max(1, g.Kompakt.Count) * 24 + 4;
-        if (!_genis) Height = _kompaktYukseklik;
+        // Rozetin boyu içeriğe göre değişiyor: ajan sayısı, kota satırı var mı,
+        // metin sarıyor mu… Sabit formül yerine WPF'e ölçtürüyoruz.
+        if (!_genis)
+        {
+            _kompaktYukseklik = KompaktYukseklikHesapla();
+            Height = _kompaktYukseklik;
+        }
 
         GenelToplamText.Text = g.GenelToplam;
         _genelToplamAcik = g.GenelToplamGoster;

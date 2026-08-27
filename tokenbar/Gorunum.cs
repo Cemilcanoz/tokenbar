@@ -27,15 +27,28 @@ public sealed record AjanKarti(
         var t = p.Totals;
 
         var kota = p.Quota;
-        var kotaBaslik = kota is null
-            ? ""
-            : $"kota  {Bicim.Yuzde(kota.UsedPercent / 100)} kullanılmış";
 
-        // ⚠️ Kota kümülatif değil, anlık durum. Ölçüm tarihini göstermezsek
-        // 26 gün önceki değeri "şu an" sanır.
-        var kotaAlt = kota is null
-            ? ""
-            : $"{kota.WindowLabel} pencere · {kota.PlanType} · ölçüm {Bicim.NeKadarOnce(kota.MeasuredAt)}";
+        // ⚠️ Kota kümülatif değil, ANLIK DURUM. Ölçümün üstünden bir pencere
+        // boyu geçtiyse o değer artık bir şey anlatmıyor — sayı yerine
+        // uyarı gösteriyoruz. Bkz. QuotaInfo.IsStale.
+        var kotaBaslik = kota switch
+        {
+            null => "",
+            { IsStale: true } => "kota  ⚠️ bayat ölçüm",
+            _ => $"kota  {Bicim.Yuzde(kota.UsedPercent / 100)} kullanılmış · " +
+                 $"kalan {Bicim.Yuzde(kota.RemainingPercent / 100)}"
+        };
+
+        var kotaAlt = kota switch
+        {
+            null => "",
+            { IsStale: true } =>
+                $"son ölçüm {Bicim.NeKadarOnce(kota.MeasuredAt)}; {kota.WindowLabel} pencere " +
+                "bu arada sıfırlandı. Ajanı bir kez çalıştır, değer tazelensin.",
+            _ => $"{kota.WindowLabel} pencere · {kota.PlanType} · " +
+                 $"ölçüm {Bicim.NeKadarOnce(kota.MeasuredAt)}" +
+                 (kota.ResetsAt is { } r ? $" · {Bicim.NeKadarSonra(r)} yenilenir" : "")
+        };
 
         var istatistik = $"{p.Stats.FilesWithData}/{p.Stats.Files} dosya";
         if (p.Stats.DedupedLines > 0) istatistik += $" · {Bicim.Tam(p.Stats.DedupedLines)} tekrar atıldı";
@@ -57,7 +70,8 @@ public sealed record AjanKarti(
             AltAjan: altAjan,
             Istatistik: istatistik,
             KotaVar: kota is not null,
-            KotaOran: Math.Clamp((kota?.UsedPercent ?? 0) / 100.0, 0, 1),
+            // Bayat ölçümde çubuk sıfır: dolu bir çubuk "durum bu" der, oysa bilmiyoruz.
+            KotaOran: kota is { IsStale: false } ? Math.Clamp(kota.UsedPercent / 100.0, 0, 1) : 0,
             KotaBaslik: kotaBaslik,
             KotaAlt: kotaAlt,
             Uyari: p.Note is not null,
@@ -72,13 +86,47 @@ public sealed record PasifAjan(string Ad, string Sebep);
 public sealed record OturumSatiri(string Ajan, string Etiket, string Toplam);
 
 /// <summary>
-/// Küçük hâldeki rozette görünen tek satır — kısa sayı (<c>210,4M</c>).
+/// Küçük hâldeki rozette görünen tek satır — kısa sayı (<c>210,4M</c>) ve
+/// varsa kalan kota.
 /// </summary>
 /// <remarks>
 /// Ajanlar burada da <b>ayrı</b> satırlarda. Tek bir birleşik sayı
 /// gösterilmiyor: 1000 Codex token'ı ile 1000 Claude token'ı aynı şey değil.
+///
+/// ⚠️ <b>"Kalan token" diye bir sayı yok.</b> Log'lar kota <b>yüzdesi</b>
+/// veriyor, mutlak bir token limiti vermiyor. Elimizdeki en dürüst ifade
+/// "kalan %41"; "kalan 84 milyon token" yazmak uydurma olurdu.
 /// </remarks>
-public sealed record KompaktSatir(string Ad, string Toplam);
+public sealed record KompaktSatir(
+    string Ad,
+    string Toplam,
+    bool KalanVar,
+    double KalanOran,
+    string KalanMetni)
+{
+    public static KompaktSatir Olustur(ProviderResult p)
+    {
+        var kota = p.Quota;
+
+        // Kota yoksa ya da bayatsa sayı GÖSTERİLMEZ, sebebi yazılır.
+        var gecerli = kota is { IsStale: false };
+
+        var metin = kota switch
+        {
+            null => "kotayı log'lar vermiyor",
+            { IsStale: true } => $"kota {Bicim.NeKadarOnce(kota.MeasuredAt)} ölçülmüş — bayat",
+            _ => $"kalan {Bicim.Yuzde(kota.RemainingPercent / 100)}" +
+                 (kota.ResetsAt is { } r ? $" · {Bicim.NeKadarSonra(r)} yenilenir" : "")
+        };
+
+        return new KompaktSatir(
+            Ad: p.AgentName,
+            Toplam: Bicim.Kisa(p.Totals.Total),
+            KalanVar: gecerli,
+            KalanOran: gecerli ? kota!.RemainingPercent / 100.0 : 0,
+            KalanMetni: metin);
+    }
+}
 
 /// <summary>Bir taramanın ekrana hazır hâli.</summary>
 public sealed record Gorunum(
@@ -136,9 +184,7 @@ public sealed record Gorunum(
             kartlar.Select(k => $"{k.Ad}: {k.Toplam}"));
         if (tooltip.Length > 127) tooltip = tooltip[..127];
 
-        var kompakt = aktif
-            .Select(p => new KompaktSatir(p.AgentName, Bicim.Kisa(p.Totals.Total)))
-            .ToList();
+        var kompakt = aktif.Select(KompaktSatir.Olustur).ToList();
 
         return new Gorunum(
             Kartlar: kartlar,
