@@ -36,7 +36,7 @@ public partial class MainWindow : Window
     private bool _basili;
     private bool _suruklendi;
 
-    private double _kompaktYukseklik = 176;
+    private double _kompaktYukseklik = 210;
 
     public event Action? YenileIstendi;
     public event Action<bool>? GenelToplamDegisti;
@@ -195,6 +195,8 @@ public partial class MainWindow : Window
     // ── Düğmeler ────────────────────────────────────────────────────────
 
     private void YenileButton_Click(object sender, RoutedEventArgs e) => YenileIstendi?.Invoke();
+
+    private void DetaylarButton_Click(object sender, RoutedEventArgs e) => Genislet();
 
     private void KucultButton_Click(object sender, RoutedEventArgs e) => Kucult();
 

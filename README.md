@@ -14,7 +14,7 @@ dosyalarından** okur — hiçbir yere bağlanmaz.
   <img src="docs/panel.png" width="330" alt="Detay paneli">
 </p>
 
-*Ekran görüntülerindeki sayılar örnektir.*
+*Ekran görüntülerindeki sayılar örnektir. Görseller önceki kontrol düzenini gösterir; güncel sürümde rozete “Detaylar” düğmesi eklendi.*
 
 ---
 
